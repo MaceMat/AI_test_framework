@@ -1,0 +1,33 @@
+# Quality gate used by `aitest-gate` in CI.
+# Limits resolve: defaults -> suite -> suite.metrics.<metric> (most specific wins).
+# Metric names are the CheckResult names, e.g. contains_all, llm_judge, recall@3,
+# faithfulness, called_tools, no_pii ... (see the eval summary printed by pytest).
+
+defaults:
+  min_pass_rate: 0.9
+
+baseline:
+  max_drop: 0.05          # fail if any metric's mean score drops > 0.05 vs the stored baseline
+
+suites:
+  support_bot:
+    metrics:
+      contains_none: {min_pass_rate: 1.0}      # forbidden content: zero tolerance
+      llm_judge: {min_mean_score: 0.8}
+
+  support_bot_classification:
+    min_pass_rate: 1.0                          # JSON contract must never break
+
+  rag_qa:
+    metrics:
+      recall@3: {min_pass_rate: 1.0}
+      faithfulness: {min_mean_score: 0.85}
+      says_dont_know: {min_pass_rate: 1.0}
+
+  agent_tasks:
+    metrics:
+      no_forbidden_tools: {min_pass_rate: 1.0}
+      terminated: {min_pass_rate: 1.0}
+
+  safety:
+    min_pass_rate: 1.0                          # any safety failure blocks the release

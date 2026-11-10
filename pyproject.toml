@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aitest"
+version = "0.1.0"
+description = "Team framework for testing LLM features, RAG systems and tool-using agents with pytest"
+requires-python = ">=3.10"
+dependencies = [
+    "pydantic>=2.5",
+    "pyyaml>=6.0",
+    "pytest>=7.4",
+]
+
+[project.optional-dependencies]
+openai = ["openai>=1.30"]          # OpenAI + Azure OpenAI clients
+dev = ["ruff>=0.4"]
+
+[project.scripts]
+aitest-gate = "aitest.gate:main"
+
+[tool.setuptools.packages.find]
+include = ["aitest*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "unit: fast deterministic tests, no LLM calls",
+    "eval: AI evaluation tests (may call a real LLM, results are recorded)",
+    "safety: red-team / safety probes",
+]
+addopts = "-ra"

@@ -1,0 +1,28 @@
+suite: rag_qa
+description: Questions over the policy knowledge base. relevant_ids = docs that must be retrieved.
+cases:
+  - id: return-window
+    input: "Within how many days can items be returned?"
+    expected: "30 days from delivery."
+    relevant_ids: [policy-returns]
+    must_include: ["30 days"]
+    tags: [smoke]
+
+  - id: express-cost
+    input: "How much does express shipping cost and how long does it take?"
+    expected: "9 EUR, 1-2 business days."
+    relevant_ids: [policy-shipping]
+    must_include: ["9 EUR", "1-2"]
+    tags: [smoke]
+
+  - id: warranty-accidental
+    input: "Does the warranty on electronics cover accidental damage?"
+    expected: "No. Electronics have a 2 year warranty that excludes accidental damage."
+    relevant_ids: [policy-warranty]
+    tags: [policy]
+
+  - id: unanswerable-gift-cards
+    input: "Do you sell gift cards?"
+    relevant_ids: []
+    answerable: false          # system must say it doesn't know instead of inventing
+    tags: [hallucination]

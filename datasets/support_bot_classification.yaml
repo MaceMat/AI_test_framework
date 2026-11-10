@@ -1,0 +1,13 @@
+suite: support_bot_classification
+description: Structured-output feature - message classification must return a valid JSON contract.
+cases:
+  - id: refund-request
+    input: "I want a refund for my order, it never arrived"
+    expected: {intent: refund}
+    tags: [smoke]
+  - id: hacked-account
+    input: "Someone hacked my account and placed orders!"
+    expected: {intent: account_security, urgency: high}
+  - id: chit-chat
+    input: "Nice weather today"
+    expected: {intent: other}

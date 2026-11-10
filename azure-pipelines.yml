@@ -1,0 +1,97 @@
+# AI test framework pipeline for Azure DevOps.
+#
+# Stage 1 (every PR/commit): unit tests + offline evals with the fake LLM. Free and fast.
+# Stage 2 (PRs to main + nightly): evals against the real model with an LLM judge,
+#          quality gate vs thresholds.yaml and the committed baseline.
+#
+# Setup: create a variable group "ai-eval-secrets" (Pipelines > Library) with
+#   AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY (secret), AITEST_JUDGE_MODEL, AITEST_SUT_MODEL
+
+trigger:
+  branches: { include: [main] }
+
+pr:
+  branches: { include: [main] }
+
+schedules:
+  - cron: "0 2 * * *"
+    displayName: Nightly full eval
+    branches: { include: [main] }
+    always: true
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  PYTHON_VERSION: "3.12"
+
+stages:
+  - stage: Fast
+    displayName: Unit + offline evals
+    jobs:
+      - job: fast
+        steps:
+          - task: UsePythonVersion@0
+            inputs: { versionSpec: $(PYTHON_VERSION) }
+          - script: pip install -e ".[openai]"
+            displayName: Install
+          - script: |
+              python -m pytest -m unit --junitxml=reports/junit-unit.xml
+            displayName: Framework unit tests
+          - script: |
+              python -m pytest -m eval --aitest-soft --junitxml=reports/junit-evals-offline.xml \
+                --aitest-report reports/eval_offline.json
+              aitest-gate reports/eval_offline.json --thresholds thresholds.yaml
+            displayName: Offline evals (fake LLM) + gate
+          - task: PublishTestResults@2
+            condition: always()
+            inputs:
+              testResultsFormat: JUnit
+              testResultsFiles: reports/junit-*.xml
+              testRunTitle: AI framework - fast
+
+  - stage: Evals
+    displayName: Model evals + quality gate
+    dependsOn: Fast
+    condition: and(succeeded(), or(eq(variables['Build.Reason'], 'PullRequest'), eq(variables['Build.Reason'], 'Schedule'), eq(variables['Build.Reason'], 'Manual')))
+    variables:
+      - group: ai-eval-secrets
+      - name: AITEST_LLM_PROVIDER
+        value: azure
+      - name: AITEST_SUT_PROVIDER
+        value: azure
+      # Nightly runs repeat each case to measure stability; PRs keep cost down.
+      - name: AITEST_REPEATS
+        ${{ if eq(variables['Build.Reason'], 'Schedule') }}:
+          value: "5"
+        ${{ else }}:
+          value: "2"
+    jobs:
+      - job: evals
+        timeoutInMinutes: 60
+        steps:
+          - task: UsePythonVersion@0
+            inputs: { versionSpec: $(PYTHON_VERSION) }
+          - script: pip install -e ".[openai]"
+            displayName: Install
+          - script: |
+              python -m pytest -m eval --aitest-soft --junitxml=reports/junit-evals.xml
+            displayName: Run evals (soft - gate decides)
+            env:
+              AZURE_OPENAI_API_KEY: $(AZURE_OPENAI_API_KEY)
+          - script: |
+              aitest-gate reports/eval_results.json --thresholds thresholds.yaml \
+                --baseline baselines/main.json --markdown reports/summary.md
+            displayName: Quality gate
+          - script: echo "##vso[task.uploadsummary]$(System.DefaultWorkingDirectory)/reports/summary.md"
+            displayName: Attach summary to run
+            condition: always()
+          - task: PublishTestResults@2
+            condition: always()
+            inputs:
+              testResultsFormat: JUnit
+              testResultsFiles: reports/junit-evals.xml
+              testRunTitle: AI evals
+          - publish: reports
+            artifact: eval-reports-$(System.JobAttempt)
+            condition: always()
